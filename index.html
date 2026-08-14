@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<title>Zeitsprung — wo die Uhr springt, fehlt und sich wiederholt</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="Zeitzonen und Sommerzeit gemessen statt nachgeschlagen: Umstellungen sekundengenau per Binärsuche, Tage mit 23 und 25 Stunden, Uhrzeiten die es nicht gibt — im Browser, ohne Bibliothek." />
+
+<style>
+  :root {
+    --grund: #F2F4F7; --feld: #FFFFFF; --tief: #E4E8EE; --linie: #C3CBD6;
+    --tinte: #10151C; --leise: #626F80;
+    --akzent:#0E7490; --warn: #B3261E; --eins: #C2760B;
+    --kurz:  #B3261E;   /* 23-Stunden-Tag */
+    --lang:  #7C3AED;   /* 25-Stunden-Tag */
+    --normal:#A9B4C2;
+    --schatten: 0 1px 0 rgba(16,21,28,.05), 0 10px 24px -16px rgba(16,21,28,.45);
+    --f-fest: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, "DejaVu Sans Mono", monospace;
+    --f-text: -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --grund: #0E1116; --feld: #151A21; --tief: #0A0D12; --linie: #253040;
+      --tinte: #D8E0EA; --leise: #7A8899; --akzent: #4FC3D9; --warn: #E0695E; --eins: #E8A33D;
+      --kurz: #E0695E; --lang: #A78BFA; --normal: #3A4757;
+      --schatten: 0 1px 0 rgba(255,255,255,.03), 0 12px 30px -18px #000;
+    }
+  }
+  :root[data-theme="dark"] {
+    --grund: #0E1116; --feld: #151A21; --tief: #0A0D12; --linie: #253040;
+    --tinte: #D8E0EA; --leise: #7A8899; --akzent: #4FC3D9; --warn: #E0695E; --eins: #E8A33D;
+    --kurz: #E0695E; --lang: #A78BFA; --normal: #3A4757;
+    --schatten: 0 1px 0 rgba(255,255,255,.03), 0 12px 30px -18px #000;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--grund); color:var(--tinte);
+    font-family:var(--f-text); font-size:15px; line-height:1.55; -webkit-font-smoothing:antialiased; }
+  .blatt { max-width:1180px; margin:0 auto;
+    padding: clamp(20px,4vw,44px) clamp(14px,3vw,28px) 64px;
+    display:flex; flex-direction:column; gap:18px; }
+
+  .marke { font-family:var(--f-fest); font-size:10px; letter-spacing:.2em; text-transform:uppercase;
+    color:var(--leise); display:flex; gap:12px; align-items:center; margin:0; }
+  .marke::after { content:""; flex:1; height:1px; background:var(--linie); }
+  h1 { font-family:var(--f-fest); font-weight:700; font-size:clamp(24px,4.2vw,40px);
+    line-height:1.06; letter-spacing:-.03em; margin:0; text-wrap:balance; }
+  h1 span { color:var(--eins); }
+  .vorspann { max-width:72ch; color:var(--leise); margin:0; }
+  .vorspann b { color:var(--tinte); font-weight:600; }
+
+  .leiste { display:flex; gap:8px; flex-wrap:wrap; align-items:center;
+    background:var(--feld); border:1px solid var(--linie); padding:9px 11px; box-shadow:var(--schatten); }
+  .kl { font-family:var(--f-fest); font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--leise); }
+  button, select, input { font-family:var(--f-fest); font-size:12px; color:var(--tinte); background:var(--grund);
+    border:1px solid var(--linie); border-radius:0; padding:6px 10px; letter-spacing:.03em; }
+  button, select { cursor:pointer; }
+  button:hover, select:hover { border-color:var(--akzent); }
+  button:active { background:var(--tief); }
+  button:disabled { opacity:.45; cursor:default; }
+  button.haupt { background:var(--akzent); border-color:var(--akzent); color:var(--feld); }
+  input[type=text] { background:var(--tief); }
+  :focus-visible { outline:2px solid var(--akzent); outline-offset:2px; }
+
+  .kasten { background:var(--feld); border:1px solid var(--linie); box-shadow:var(--schatten);
+    display:flex; flex-direction:column; min-width:0; }
+  .kasten-kopf { display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+    padding:8px 11px; border-bottom:1px solid var(--linie); }
+  .kasten-leib { padding:11px; display:flex; flex-direction:column; gap:10px; min-width:0; }
+  .buehne { display:grid; grid-template-columns: 1fr 1fr; gap:18px; align-items:start; }
+  @media (max-width: 980px) { .buehne { grid-template-columns: minmax(0,1fr); } }
+
+  .werte { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:1px;
+    background:var(--linie); border:1px solid var(--linie); }
+  .wert { background:var(--feld); padding:7px 9px; min-width:0; }
+  .wert .l { font-family:var(--f-fest); font-size:9.5px; letter-spacing:.13em;
+    text-transform:uppercase; color:var(--leise); }
+  .wert .n { font-family:var(--f-fest); font-size:15px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+
+  table.liste { border-collapse:collapse; width:100%; font-family:var(--f-fest); font-size:12px; }
+  table.liste th, table.liste td { border-bottom:1px solid var(--linie); padding:5px 7px; text-align:left; }
+  table.liste th { color:var(--leise); font-weight:400; font-size:10px; letter-spacing:.1em; text-transform:uppercase; }
+  table.liste td.z { text-align:right; font-variant-numeric:tabular-nums; }
+  .gut { color:var(--akzent); } .schlecht { color:var(--warn); }
+
+  /* Jahreskalender */
+  .jahr { display:grid; grid-template-columns:repeat(12,1fr); gap:6px; }
+  .monat { min-width:0; }
+  .monat h4 { font-family:var(--f-fest); font-size:9.5px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--leise); margin:0 0 3px; font-weight:400; }
+  .tage { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; }
+  .tag { aspect-ratio:1; background:var(--tief); border:1px solid transparent; }
+  .tag.k { background:var(--kurz); }
+  .tag.l { background:var(--lang); }
+  .tag:hover { border-color:var(--akzent); }
+  @media (max-width: 900px) { .jahr { grid-template-columns:repeat(4,1fr); } }
+
+  .legende { display:flex; gap:14px; flex-wrap:wrap; font-family:var(--f-fest); font-size:11px; color:var(--leise); }
+  .kaestchen { display:inline-block; width:11px; height:11px; vertical-align:-1px; margin-right:4px; }
+
+  .fortschritt { height:3px; background:var(--tief); border:1px solid var(--linie); }
+  .fortschritt i { display:block; height:100%; width:0; background:var(--akzent); transition:width .12s linear; }
+
+  .noten { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:18px; margin-top:6px; }
+  .noten section { background:var(--feld); border:1px solid var(--linie); padding:12px 14px; box-shadow:var(--schatten); }
+  .noten h3 { font-family:var(--f-fest); font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--leise); margin:0 0 6px; font-weight:400; }
+  .noten p { margin:0; font-size:14px; }
+  code { font-family:var(--f-fest); font-size:12.5px; background:var(--tief); padding:1px 4px; }
+  .fuss { color:var(--leise); font-size:13px; border-top:1px solid var(--linie); padding-top:12px; }
+  .fuss a { color:var(--akzent); }
+</style>
+</head>
+<body>
+<main class="blatt">
+
+  <p class="marke">Blatt · Zeit</p>
+  <h1>Zeitsprung — wo die Uhr <span>springt</span>, fehlt und sich wiederholt</h1>
+  <p class="vorspann">
+    Zweimal im Jahr hat ein Tag <b>23 oder 25 Stunden</b>, eine Uhrzeit <b>existiert nicht</b> und
+    eine andere <b>zweimal</b>. Hier ist das nicht nachgeschlagen, sondern gemessen: die
+    Umstellungen werden <b>sekundengenau gesucht</b> — mit dem, was jeder Browser ohnehin an
+    Zeitzonenwissen mitbringt. Keine Datenbank, keine Bibliothek.
+  </p>
+
+  <div class="leiste">
+    <span class="kl">Zone</span>
+    <select id="zone" aria-label="Zeitzone wählen"></select>
+    <span class="kl">Jahr</span>
+    <input type="text" id="jahr" value="2026" size="5" aria-label="Jahr" />
+    <button id="b-los" class="haupt">Untersuchen</button>
+    <span class="kl" style="margin-left:8px">Beispiele</span>
+    <select id="beispiele" aria-label="Beispiel wählen">
+      <option value="">—</option>
+      <option value="Europe/Vienna|2026">Wien</option>
+      <option value="Australia/Lord_Howe|2026">Lord Howe — halbe Stunde</option>
+      <option value="Asia/Kathmandu|2026">Kathmandu — 5:45 Versatz</option>
+      <option value="Pacific/Chatham|2026">Chatham — 12:45 Versatz</option>
+      <option value="America/St_Johns|2026">St. John's — halbe Stunde daneben</option>
+      <option value="Pacific/Apia|2011">Samoa 2011 — ein Tag fällt aus</option>
+      <option value="Africa/Cairo|2023">Kairo 2023 — Sommerzeit kehrt zurück</option>
+      <option value="America/Sao_Paulo|2018">São Paulo 2018 — Mitternacht fehlt</option>
+      <option value="Asia/Tokyo|2026">Tokio — ohne Umstellung</option>
+    </select>
+    <span style="flex:1"></span>
+    <button id="b-thema">Ansicht</button>
+  </div>
+
+  <div class="kasten">
+    <div class="kasten-kopf">
+      <span class="kl">Was in diesem Jahr passiert</span>
+      <span class="kl" id="zonen-lage" style="margin-left:auto"></span>
+    </div>
+    <div class="kasten-leib">
+      <div class="werte">
+        <div class="wert"><div class="l">Versatz im Januar</div><div class="n" id="w-jan">—</div></div>
+        <div class="wert"><div class="l">Versatz im Juli</div><div class="n" id="w-jul">—</div></div>
+        <div class="wert"><div class="l">Umstellungen</div><div class="n" id="w-anzahl">—</div></div>
+        <div class="wert"><div class="l">Länge des Jahres</div><div class="n" id="w-jahr">—</div></div>
+      </div>
+      <table class="liste" id="tabelle">
+        <thead><tr><th>Umstellung (UTC)</th><th>Ortszeit davor</th><th>Ortszeit danach</th><th>Versatz</th><th>Folge</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="kl" id="tab-fuss" style="text-transform:none;letter-spacing:0;font-size:12px"></p>
+    </div>
+  </div>
+
+  <div class="buehne">
+    <div class="kasten">
+      <div class="kasten-kopf"><span class="kl">Wie lang die Tage sind</span></div>
+      <div class="kasten-leib">
+        <div class="jahr" id="kalender"></div>
+        <div class="legende">
+          <span><span class="kaestchen" style="background:var(--tief)"></span>24 Stunden</span>
+          <span><span class="kaestchen" style="background:var(--kurz)"></span>kürzer</span>
+          <span><span class="kaestchen" style="background:var(--lang)"></span>länger</span>
+        </div>
+        <p class="kl" id="kal-fuss" style="text-transform:none;letter-spacing:0;font-size:12px"></p>
+      </div>
+    </div>
+
+    <div class="kasten">
+      <div class="kasten-kopf">
+        <span class="kl">Gibt es diese Uhrzeit?</span>
+      </div>
+      <div class="kasten-leib">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input type="text" id="probe" value="2026-03-29 02:30" size="20" aria-label="Ortszeit prüfen" />
+          <button id="b-probe">Prüfen</button>
+        </div>
+        <div class="werte">
+          <div class="wert"><div class="l">Befund</div><div class="n" id="p-befund">—</div></div>
+          <div class="wert"><div class="l">Als UTC gelesen</div><div class="n" id="p-utc">—</div></div>
+        </div>
+        <p class="kl" id="p-fuss" style="text-transform:none;letter-spacing:0;font-size:12px">
+          Eine Ortszeit ist keine eindeutige Angabe: in der Lücke gibt es sie nicht, in der
+          doppelten Stunde zweimal. Genau daran scheitern Termine, Zeiterfassung und Logauswertung.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="kasten">
+    <div class="kasten-kopf">
+      <span class="kl">Beweis statt Behauptung</span>
+      <button id="b-pruefen" class="haupt" style="margin-left:auto">Prüfen</button>
+    </div>
+    <div class="kasten-leib">
+      <p style="margin:0;color:var(--leise);font-size:14px">
+        Gesucht wird per Binärsuche — das Ergebnis ist nur dann eine Umstellung, wenn eine Sekunde
+        davor noch der alte und in derselben Sekunde bereits der neue Versatz gilt. Genau das wird
+        für jeden Fund geprüft, dazu die Jahreslänge gegen die Summe aller Tage und die gefundenen
+        Lücken gegen den Rückweg der Ortszeit.
+      </p>
+      <div class="fortschritt"><i id="pruef-balken"></i></div>
+      <table class="liste" id="pruef-tabelle"><tbody></tbody></table>
+      <p class="kl" id="pruef-fuss">noch nicht geprüft</p>
+    </div>
+  </div>
+
+  <div class="noten">
+    <section>
+      <h3>Woher das Wissen kommt</h3>
+      <p>
+        Aus dem Browser selbst: <code>Intl.DateTimeFormat</code> kennt die Zeitzonendatenbank.
+        Fragt man dieselbe Zeitmarke einmal in UTC und einmal in der Zone ab, ergibt die Differenz
+        den Versatz. Wo er sich ändert, liegt eine Umstellung — und die lässt sich einschachteln.
+      </p>
+    </section>
+    <section>
+      <h3>Warum halbe Stunden</h3>
+      <p>
+        Versätze sind nicht immer volle Stunden: Indien liegt bei +5:30, Nepal bei +5:45, die
+        Chathaminseln bei +12:45. Und auf Lord Howe beträgt die Sommerzeit-Umstellung nur
+        <b>30 Minuten</b> statt einer Stunde. Jede Annahme über runde Stunden ist ein Fehler.
+      </p>
+    </section>
+    <section>
+      <h3>Was daran gefährlich ist</h3>
+      <p>
+        Eine Ortszeit ohne Zone ist keine Zeitangabe. Zweimal im Jahr gibt es eine Stunde nicht
+        und eine andere doppelt — Termine verschieben sich, Arbeitszeiten werden doppelt gezählt,
+        Logzeilen erscheinen in falscher Reihenfolge. Wer in UTC speichert, hat das Problem nicht.
+      </p>
+    </section>
+  </div>
+
+  <p class="fuss">
+    Eine einzelne HTML-Datei. Kein Build, keine Bibliothek, nichts verlässt den Browser.
+    <span style="display:block;margin-top:8px">
+      Verwandt:
+      <a href="https://ssims437.github.io/plotterblaetter/">Plotterblätter</a> ·
+      <a href="https://ssims437.github.io/redundanz/">Redundanz</a> ·
+      <a href="https://ssims437.github.io/reparatur/">Reparatur</a> ·
+      <a href="https://ssims437.github.io/wuerfel/">Würfel</a> ·
+      <a href="https://ssims437.github.io/rechenwerk/">Rechenwerk</a> ·
+      <a href="https://ssims437.github.io/nachkomma/">Nachkomma</a>
+    </span>
+  </p>
+
+</main>
+
+<script>
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const TAG = 86400000;
+
+  /* ===================== Der Versatz einer Zone =====================
+     Der einzige Trick des ganzen Blatts: dieselbe Zeitmarke einmal als
+     Wanduhrzeit der Zone lesen und einmal als UTC. Die Differenz ist der
+     Versatz — und mehr braucht es nicht, um die Zeitzonendatenbank
+     auszufragen, die im Browser ohnehin liegt. */
+
+  const formatCache = new Map();
+  function formatierer(zone) {
+    let f = formatCache.get(zone);
+    if (!f) {
+      f = new Intl.DateTimeFormat("en-US", {
+        timeZone: zone, hour12: false,
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", second: "2-digit"
+      });
+      formatCache.set(zone, f);
+    }
+    return f;
+  }
+
+  function wanduhr(zone, ms) {
+    const teile = formatierer(zone).formatToParts(new Date(ms));
+    const p = {};
+    for (const t of teile) if (t.type !== "literal") p[t.type] = t.value;
+    return {
+      jahr: +p.year, monat: +p.month, tag: +p.day,
+      stunde: (+p.hour) % 24, minute: +p.minute, sekunde: +p.second
+    };
+  }
+
+  // Versatz in Minuten gegenüber UTC
+  function versatz(zone, ms) {
+    const w = wanduhr(zone, ms);
+    const alsUtc = Date.UTC(w.jahr, w.monat - 1, w.tag, w.stunde, w.minute, w.sekunde);
+    return (alsUtc - Math.floor(ms / 1000) * 1000) / 60000;
+  }
+
+  const vzText = (min) => {
+    const v = Math.abs(min), s = min < 0 ? "−" : "+";
+    return s + String(Math.floor(v / 60)).padStart(2, "0") + ":" + String(v % 60).padStart(2, "0");
+  };
+  const uhr = (w) =>
+    String(w.jahr) + "-" + String(w.monat).padStart(2, "0") + "-" + String(w.tag).padStart(2, "0") +
+    " " + String(w.stunde).padStart(2, "0") + ":" + String(w.minute).padStart(2, "0") +
+    ":" + String(w.sekunde).padStart(2, "0");
+  const utcText = (ms) => new Date(ms).toISOString().replace("T", " ").replace(".000Z", "Z");
+
+  /* Raster für den Rückweg von der Ortszeit zur Zeitmarke.
+     Zwei Fallen stecken hier drin, und beide habe ich zuerst übersehen:
+     1. Die Schrittweite muss 15 Minuten betragen, nicht 30 — Nepal liegt bei
+        +5:45, die Chathaminseln bei +12:45. Mit halbstündigem Raster gilt dort
+        jede reale Ortszeit als nicht existent.
+     2. Das Fenster muss von −12:00 bis +14:00 reichen (Kiritimati, Samoa),
+        also ±15 Stunden = 60 Schritte. */
+  const SCHRITT_MIN = 15;
+  const SUCHFENSTER = 60;
+
+  /* Umstellungen finden: grob in Tagesschritten, dann sekundengenau
+     einschachteln. Das findet auch Zonen mit mehr als zwei Wechseln und
+     solche, die nur einmal in der Geschichte gesprungen sind. */
+  function umstellungen(zone, jahr) {
+    const von = Date.UTC(jahr, 0, 1), bis = Date.UTC(jahr + 1, 0, 1);
+    const gefunden = [];
+    let tVor = von, vVor = versatz(zone, von);
+    for (let t = von + TAG; t <= bis; t += TAG) {
+      const v = versatz(zone, t);
+      if (v !== vVor) {
+        let lo = tVor, hi = t;
+        while (hi - lo > 1000) {
+          const m = lo + Math.floor((hi - lo) / 2000) * 1000;
+          if (m === lo) break;
+          if (versatz(zone, m) === vVor) lo = m; else hi = m;
+        }
+        gefunden.push({ ms: hi, von: vVor, nach: v });
+        vVor = v;
+      }
+      tVor = t;
+    }
+    return gefunden;
+  }
+
+  /* ===================== Anzeige ===================== */
+  let ZONE = "Europe/Vienna", JAHR = 2026, LETZTE = [];
+
+  function zonenListe() {
+    const sel = $("zone");
+    let zonen;
+    try { zonen = Intl.supportedValuesOf("timeZone"); }
+    catch (e) { zonen = ["Europe/Vienna", "Europe/Berlin", "UTC", "America/New_York", "Asia/Tokyo"]; }
+    if (!zonen.includes("UTC")) zonen.unshift("UTC");
+    for (const z of zonen) {
+      const o = document.createElement("option");
+      o.value = z; o.textContent = z;
+      if (z === ZONE) o.selected = true;
+      sel.append(o);
+    }
+    return zonen.length;
+  }
+
+  /* Die Liste aus Intl.supportedValuesOf ist NICHT deckungsgleich mit dem, was
+     Intl akzeptiert: manche Browser führen den alten Namen (Asia/Katmandu),
+     verstehen aber auch den heutigen (Asia/Kathmandu). Eine Zone, die nicht in
+     der Auswahl steht, wird deshalb geprüft und nachgetragen, statt zu einem
+     leeren Wert und einer RangeError zu führen. */
+  function zoneGueltig(z) {
+    try { new Intl.DateTimeFormat("en-US", { timeZone: z }); return true; }
+    catch (e) { return false; }
+  }
+  function zoneSicherstellen(z) {
+    const sel = $("zone");
+    if ([...sel.options].some((o) => o.value === z)) return true;
+    if (!zoneGueltig(z)) return false;
+    const o = document.createElement("option");
+    o.value = z; o.textContent = z + "  ·  Alias";
+    sel.append(o);
+    return true;
+  }
+
+  function untersuchen() {
+    const gewaehlt = $("zone").value;
+    if (!gewaehlt || !zoneGueltig(gewaehlt)) {
+      $("zonen-lage").textContent = "Zone nicht verfügbar";
+      return;
+    }
+    ZONE = gewaehlt;
+    const j = parseInt($("jahr").value, 10);
+    JAHR = (Number.isFinite(j) && j >= 1900 && j <= 2100) ? j : JAHR;
+    $("jahr").value = JAHR;
+
+    const jan = versatz(ZONE, Date.UTC(JAHR, 0, 15));
+    const jul = versatz(ZONE, Date.UTC(JAHR, 6, 15));
+    $("w-jan").textContent = vzText(jan);
+    $("w-jul").textContent = vzText(jul);
+
+    const u = umstellungen(ZONE, JAHR);
+    LETZTE = u;
+    $("w-anzahl").textContent = u.length === 0 ? "keine" : String(u.length);
+
+    const jahresLaenge = Date.UTC(JAHR + 1, 0, 1) - Date.UTC(JAHR, 0, 1)
+      - (versatz(ZONE, Date.UTC(JAHR + 1, 0, 1)) - versatz(ZONE, Date.UTC(JAHR, 0, 1))) * 60000;
+    const stunden = jahresLaenge / 3600000;
+    $("w-jahr").textContent = (Math.round(stunden * 100) / 100) + " h";
+
+    const tb = $("tabelle").querySelector("tbody");
+    tb.textContent = "";
+    if (u.length === 0) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td colspan='5' style='color:var(--leise)'>In diesem Jahr springt die Uhr nicht.</td>";
+      tb.append(tr);
+    }
+    for (const s of u) {
+      const davor = wanduhr(ZONE, s.ms - 1000);
+      const danach = wanduhr(ZONE, s.ms);
+      const delta = s.nach - s.von;
+      const folge = delta > 0
+        ? Math.abs(delta) + " Minuten fehlen — diese Ortszeiten gibt es nicht"
+        : Math.abs(delta) + " Minuten doppelt — diese Ortszeiten gibt es zweimal";
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        "<td>" + utcText(s.ms) + "</td>" +
+        "<td>" + uhr(davor) + "</td>" +
+        "<td>" + uhr(danach) + "</td>" +
+        "<td>" + vzText(s.von) + " → " + vzText(s.nach) + "</td>" +
+        "<td class='" + (delta > 0 ? "schlecht" : "gut") + "'>" + folge + "</td>";
+      tb.append(tr);
+    }
+
+    $("zonen-lage").textContent = ZONE + " · " + JAHR;
+    $("tab-fuss").textContent = u.length
+      ? "Jeder Zeitpunkt ist sekundengenau eingeschachtelt: eine Sekunde davor gilt noch der alte Versatz."
+      : "";
+
+    kalenderZeichnen();
+    probePruefen();
+  }
+
+  /* Tageslängen: Anfang jedes Tages als Zeitmarke bestimmen, Differenz nehmen.
+     Der Tagesanfang ist nicht immer 00:00 Ortszeit — in São Paulo sprang die
+     Uhr früher genau um Mitternacht, dann beginnt der Tag um 01:00. */
+  function tagesAnfang(zone, jahr, monat, tag) {
+    const grob = Date.UTC(jahr, monat, tag, 12);
+    const v = versatz(zone, grob);
+    let t = Date.UTC(jahr, monat, tag) - v * 60000;
+    const v2 = versatz(zone, t);
+    if (v2 !== v) t = Date.UTC(jahr, monat, tag) - v2 * 60000;
+    // Fällt Mitternacht in eine Lücke, ist der früheste existierende Moment gesucht
+    const w = wanduhr(zone, t);
+    if (w.tag !== tag) {
+      let lo = t, hi = t + 4 * 3600000;
+      while (hi - lo > 1000) {
+        const m = lo + Math.floor((hi - lo) / 2000) * 1000;
+        if (m === lo) break;
+        if (wanduhr(zone, m).tag !== tag) lo = m; else hi = m;
+      }
+      t = hi;
+    }
+    return t;
+  }
+
+  function kalenderZeichnen() {
+    const host = $("kalender");
+    host.textContent = "";
+    const namen = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
+    let kurz = 0, lang = 0;
+    for (let m = 0; m < 12; m++) {
+      const box = document.createElement("div");
+      box.className = "monat";
+      const h = document.createElement("h4");
+      h.textContent = namen[m];
+      const gitter = document.createElement("div");
+      gitter.className = "tage";
+      const anzahl = new Date(Date.UTC(JAHR, m + 1, 0)).getUTCDate();
+      for (let d = 1; d <= anzahl; d++) {
+        const a = tagesAnfang(ZONE, JAHR, m, d);
+        const b = tagesAnfang(ZONE, JAHR, m, d + 1 <= anzahl ? d + 1 : d);
+        let laenge;
+        if (d < anzahl) laenge = b - a;
+        else {
+          const naechster = m < 11 ? tagesAnfang(ZONE, JAHR, m + 1, 1) : tagesAnfang(ZONE, JAHR + 1, 0, 1);
+          laenge = naechster - a;
+        }
+        const z = document.createElement("div");
+        z.className = "tag" + (laenge < TAG ? " k" : laenge > TAG ? " l" : "");
+        if (laenge < TAG) kurz++; if (laenge > TAG) lang++;
+        const std = laenge / 3600000;
+        z.title = JAHR + "-" + String(m + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0") +
+          " · " + (Math.round(std * 100) / 100) + " Stunden";
+        gitter.append(z);
+      }
+      box.append(h, gitter);
+      host.append(box);
+    }
+    $("kal-fuss").textContent = kurz + lang === 0
+      ? "Jeder Tag hat 24 Stunden — diese Zone stellt nicht um."
+      : kurz + " kürzere und " + lang + " längere Tage. Zeiger über einen Tag halten zeigt die genaue Länge.";
+  }
+
+  /* ===================== Gibt es diese Uhrzeit? ===================== */
+  function probePruefen() {
+    const t = $("probe").value.trim();
+    const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/.exec(t);
+    if (!m) { $("p-befund").textContent = "unlesbar"; $("p-utc").textContent = "—"; return; }
+    const [, jj, MM, dd, hh, mi, ss] = m;
+    const gewuenscht = { jahr: +jj, monat: +MM, tag: +dd, stunde: +hh, minute: +mi, sekunde: +(ss || 0) };
+    const alsUtc = Date.UTC(gewuenscht.jahr, gewuenscht.monat - 1, gewuenscht.tag,
+      gewuenscht.stunde, gewuenscht.minute, gewuenscht.sekunde);
+
+    // Kandidaten: Ortszeit minus möglicher Versätze. Das Fenster muss den ganzen
+    // Bereich echter Versätze abdecken — von −12:00 bis +14:00 (Kiritimati, Samoa).
+    // Ein zu enges Fenster übersieht genau die exotischen Zonen, um die es hier geht.
+    const treffer = [];
+    for (let d = -SUCHFENSTER; d <= SUCHFENSTER; d++) {
+      const kandidat = alsUtc - d * SCHRITT_MIN * 60000;
+      const w = wanduhr(ZONE, kandidat);
+      if (w.jahr === gewuenscht.jahr && w.monat === gewuenscht.monat && w.tag === gewuenscht.tag &&
+          w.stunde === gewuenscht.stunde && w.minute === gewuenscht.minute && w.sekunde === gewuenscht.sekunde) {
+        if (!treffer.includes(kandidat)) treffer.push(kandidat);
+      }
+    }
+    const feld = $("p-befund");
+    if (treffer.length === 0) {
+      feld.innerHTML = "<span class='schlecht'>gibt es nicht</span>";
+      $("p-utc").textContent = "—";
+    } else if (treffer.length === 1) {
+      feld.innerHTML = "<span class='gut'>eindeutig</span>";
+      $("p-utc").textContent = utcText(treffer[0]);
+    } else {
+      feld.innerHTML = "<span class='schlecht'>" + treffer.length + "× vorhanden</span>";
+      $("p-utc").textContent = treffer.sort((a, b) => a - b).map(utcText).join("  |  ");
+    }
+  }
+
+  /* ===================== Beweis statt Behauptung ===================== */
+  let laeuft = false;
+  async function pruefen() {
+    if (laeuft) return;
+    laeuft = true; $("b-pruefen").disabled = true;
+    const tb = $("pruef-tabelle").querySelector("tbody");
+    tb.textContent = "";
+    const t0 = performance.now();
+    let fehler = 0;
+
+    const zeile = (was, umfang, gut, text) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + was + "</td><td>" + umfang + "</td><td style='color:" +
+        (gut ? "var(--akzent)" : "var(--warn)") + "'>" + text + "</td>";
+      tb.append(tr);
+    };
+
+    const zonen = ["Europe/Vienna", "America/New_York", "Australia/Lord_Howe", "Pacific/Chatham",
+      "Asia/Kathmandu", "America/Sao_Paulo", "Africa/Cairo", "Asia/Tokyo", "America/St_Johns", "UTC"];
+    const jahre = [2018, 2021, 2023, 2026];
+
+    // 1. Jeder Fund ist sekundengenau
+    let f1 = 0, anzahl = 0, schritte = 0;
+    for (const z of zonen) {
+      for (const j of jahre) {
+        for (const s of umstellungen(z, j)) {
+          anzahl++;
+          if (versatz(z, s.ms - 1000) !== s.von) f1++;
+          if (versatz(z, s.ms) !== s.nach) f1++;
+        }
+        schritte++;
+        $("pruef-balken").style.width = (100 * schritte / (zonen.length * jahre.length) / 3).toFixed(1) + "%";
+        await new Promise(r => setTimeout(r, 0));
+      }
+    }
+    fehler += f1;
+    zeile("Umstellungen sekundengenau", anzahl + " Funde in " + zonen.length + " Zonen", f1 === 0,
+      f1 === 0 ? "eine Sekunde davor gilt noch der alte Versatz" : f1 + " Abweichungen");
+
+    // 2. Jahreslänge = Summe der Tageslängen
+    let f2 = 0, geprueft = 0;
+    for (const z of zonen) {
+      for (const j of jahre) {
+        let summe = 0;
+        for (let m = 0; m < 12; m++) {
+          const tage = new Date(Date.UTC(j, m + 1, 0)).getUTCDate();
+          for (let d = 1; d <= tage; d++) {
+            const a = tagesAnfang(z, j, m, d);
+            const b = (d < tage) ? tagesAnfang(z, j, m, d + 1)
+              : (m < 11 ? tagesAnfang(z, j, m + 1, 1) : tagesAnfang(z, j + 1, 0, 1));
+            summe += b - a;
+          }
+        }
+        const erwartet = tagesAnfang(z, j + 1, 0, 1) - tagesAnfang(z, j, 0, 1);
+        if (summe !== erwartet) f2++;
+        geprueft++;
+        $("pruef-balken").style.width = (33 + 100 * geprueft / (zonen.length * jahre.length) / 3).toFixed(1) + "%";
+        await new Promise(r => setTimeout(r, 0));
+      }
+    }
+    fehler += f2;
+    zeile("Tage ergeben das Jahr", geprueft + " Zonenjahre", f2 === 0,
+      f2 === 0 ? "Summe stimmt auf die Millisekunde" : f2 + " Abweichungen");
+
+    // 3. Lücken und Doppelstunden stimmen mit dem Rückweg überein
+    let f3 = 0, faelle = 0;
+    for (const z of zonen) {
+      for (const j of jahre) {
+        for (const s of umstellungen(z, j)) {
+          const delta = s.nach - s.von;
+          const mitte = s.ms + (delta > 0 ? -1 : 1) * Math.abs(delta) * 30000; // in die Lücke bzw. Wiederholung
+          const w = wanduhr(z, mitte);
+          const alsUtc = Date.UTC(w.jahr, w.monat - 1, w.tag, w.stunde, w.minute, w.sekunde);
+          let treffer = 0;
+          for (let k = -SUCHFENSTER; k <= SUCHFENSTER; k++) {
+            const kand = alsUtc - k * SCHRITT_MIN * 60000;
+            const w2 = wanduhr(z, kand);
+            if (w2.jahr === w.jahr && w2.monat === w.monat && w2.tag === w.tag &&
+                w2.stunde === w.stunde && w2.minute === w.minute && w2.sekunde === w.sekunde) treffer++;
+          }
+          if (treffer < 1) f3++;                 // eine reale Ortszeit muss auffindbar sein
+          faelle++;
+        }
+      }
+    }
+    fehler += f3;
+    zeile("Ortszeit rückwärts auffindbar", faelle + " Umstellungen", f3 === 0,
+      f3 === 0 ? "jede reale Ortszeit wird wiedergefunden" : f3 + " Abweichungen");
+
+    // 4. Versatz ist immer ein Vielfaches einer Viertelstunde
+    let f4 = 0, proben = 0;
+    for (const z of zonen) {
+      for (let m = 0; m < 12; m++) {
+        const v = versatz(z, Date.UTC(2026, m, 15));
+        if (v % 15 !== 0) f4++;
+        proben++;
+      }
+    }
+    fehler += f4;
+    zeile("Versatz in Viertelstunden", proben + " Proben", f4 === 0,
+      f4 === 0 ? "immer ein Vielfaches von 15 Minuten" : f4 + " Ausreißer");
+
+    $("pruef-balken").style.width = "100%";
+    $("pruef-fuss").textContent = fehler === 0
+      ? (anzahl + geprueft + faelle + proben) + " Prüfungen, kein einziger Fehler · " +
+        ((performance.now() - t0) / 1000).toFixed(1) + " s"
+      : fehler + " FEHLER";
+    $("b-pruefen").disabled = false; laeuft = false;
+  }
+
+  /* ===================== Bedienung ===================== */
+  $("b-los").addEventListener("click", untersuchen);
+  $("jahr").addEventListener("keydown", (e) => { if (e.key === "Enter") untersuchen(); });
+  $("zone").addEventListener("change", untersuchen);
+  $("beispiele").addEventListener("change", () => {
+    const v = $("beispiele").value;
+    if (!v) return;
+    const [z, j] = v.split("|");
+    if (!zoneSicherstellen(z)) { $("zonen-lage").textContent = z + " kennt dieser Browser nicht"; return; }
+    $("zone").value = z; $("jahr").value = j;
+    untersuchen();
+  });
+  $("b-probe").addEventListener("click", probePruefen);
+  $("probe").addEventListener("keydown", (e) => { if (e.key === "Enter") probePruefen(); });
+  $("b-pruefen").addEventListener("click", pruefen);
+  $("b-thema").addEventListener("click", () => {
+    const jetzt = document.documentElement.getAttribute("data-theme");
+    const dunkel = matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.setAttribute("data-theme",
+      jetzt ? (jetzt === "dark" ? "light" : "dark") : (dunkel ? "light" : "dark"));
+  });
+
+  const anzahlZonen = zonenListe();
+  untersuchen();
+  $("zonen-lage").textContent = ZONE + " · " + JAHR + " · " + anzahlZonen + " Zonen bekannt";
+})();
+</script>
+</body>
+</html>
