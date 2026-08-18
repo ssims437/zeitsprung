@@ -116,4 +116,4 @@ lehrreichen Fällen.
 
 [MIT](LICENSE) — nimm es, zerleg es, bau was Besseres.
 
-Alle fünfzehn Blätter, nach Feld geordnet: **[ssims437.github.io](https://ssims437.github.io/)**
+Alle Blätter nach Feld geordnet: **[ssims437.github.io](https://ssims437.github.io/)**
