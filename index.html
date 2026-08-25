@@ -9,8 +9,8 @@
 <style>
   :root {
     --grund: #F2F4F7; --feld: #FFFFFF; --tief: #E4E8EE; --linie: #C3CBD6;
-    --tinte: #10151C; --leise: #626F80;
-    --akzent:#0E7490; --warn: #B3261E; --eins: #C2760B;
+    --tinte: #10151C; --leise: #5A6676;
+    --merk:#0E7490; --warn: #B3261E; --eins: #C2760B;
     --kurz:  #B3261E;   /* 23-Stunden-Tag */
     --lang:  #7C3AED;   /* 25-Stunden-Tag */
     --normal:#A9B4C2;
@@ -21,14 +21,14 @@
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       --grund: #0E1116; --feld: #151A21; --tief: #0A0D12; --linie: #253040;
-      --tinte: #D8E0EA; --leise: #7A8899; --akzent: #4FC3D9; --warn: #E0695E; --eins: #E8A33D;
+      --tinte: #D8E0EA; --leise: #7A8899; --merk: #4FC3D9; --warn: #E0695E; --eins: #E8A33D;
       --kurz: #E0695E; --lang: #A78BFA; --normal: #3A4757;
       --schatten: 0 1px 0 rgba(255,255,255,.03), 0 12px 30px -18px #000;
     }
   }
   :root[data-theme="dark"] {
     --grund: #0E1116; --feld: #151A21; --tief: #0A0D12; --linie: #253040;
-    --tinte: #D8E0EA; --leise: #7A8899; --akzent: #4FC3D9; --warn: #E0695E; --eins: #E8A33D;
+    --tinte: #D8E0EA; --leise: #7A8899; --merk: #4FC3D9; --warn: #E0695E; --eins: #E8A33D;
     --kurz: #E0695E; --lang: #A78BFA; --normal: #3A4757;
     --schatten: 0 1px 0 rgba(255,255,255,.03), 0 12px 30px -18px #000;
   }
@@ -55,12 +55,12 @@
   button, select, input { font-family:var(--f-fest); font-size:12px; color:var(--tinte); background:var(--grund);
     border:1px solid var(--linie); border-radius:0; padding:6px 10px; letter-spacing:.03em; }
   button, select { cursor:pointer; }
-  button:hover, select:hover { border-color:var(--akzent); }
+  button:hover, select:hover { border-color:var(--merk); }
   button:active { background:var(--tief); }
   button:disabled { opacity:.45; cursor:default; }
-  button.haupt { background:var(--akzent); border-color:var(--akzent); color:var(--feld); }
+  button.haupt { background:var(--merk); border-color:var(--merk); color:var(--feld); }
   input[type=text] { background:var(--tief); }
-  :focus-visible { outline:2px solid var(--akzent); outline-offset:2px; }
+  :focus-visible { outline:2px solid var(--merk); outline-offset:2px; }
 
   .kasten { background:var(--feld); border:1px solid var(--linie); box-shadow:var(--schatten);
     display:flex; flex-direction:column; min-width:0; }
@@ -81,7 +81,7 @@
   table.liste th, table.liste td { border-bottom:1px solid var(--linie); padding:5px 7px; text-align:left; }
   table.liste th { color:var(--leise); font-weight:400; font-size:10px; letter-spacing:.1em; text-transform:uppercase; }
   table.liste td.z { text-align:right; font-variant-numeric:tabular-nums; }
-  .gut { color:var(--akzent); } .schlecht { color:var(--warn); }
+  .gut { color:var(--merk); } .schlecht { color:var(--warn); }
 
   /* Jahreskalender */
   .jahr { display:grid; grid-template-columns:repeat(12,1fr); gap:6px; }
@@ -92,14 +92,14 @@
   .tag { aspect-ratio:1; background:var(--tief); border:1px solid transparent; }
   .tag.k { background:var(--kurz); }
   .tag.l { background:var(--lang); }
-  .tag:hover { border-color:var(--akzent); }
+  .tag:hover { border-color:var(--merk); }
   @media (max-width: 900px) { .jahr { grid-template-columns:repeat(4,1fr); } }
 
   .legende { display:flex; gap:14px; flex-wrap:wrap; font-family:var(--f-fest); font-size:11px; color:var(--leise); }
   .kaestchen { display:inline-block; width:11px; height:11px; vertical-align:-1px; margin-right:4px; }
 
   .fortschritt { height:3px; background:var(--tief); border:1px solid var(--linie); }
-  .fortschritt i { display:block; height:100%; width:0; background:var(--akzent); transition:width .12s linear; }
+  .fortschritt i { display:block; height:100%; width:0; background:var(--merk); transition:width .12s linear; }
 
   .noten { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:18px; margin-top:6px; }
   .noten section { background:var(--feld); border:1px solid var(--linie); padding:12px 14px; box-shadow:var(--schatten); }
@@ -108,12 +108,22 @@
   .noten p { margin:0; font-size:14px; }
   code { font-family:var(--f-fest); font-size:12.5px; background:var(--tief); padding:1px 4px; }
   .fuss { color:var(--leise); font-size:13px; border-top:1px solid var(--linie); padding-top:12px; }
-  .fuss a { color:var(--akzent); }
+  .fuss a { color:var(--merk); }
 
   /* PFLEGE: breite-schirme */
   @media (min-width: 1500px) { .blatt { max-width: 1360px; } }
   @media (min-width: 1800px) { .blatt { max-width: 1560px; } }
   @media (min-width: 2200px) { .blatt { max-width: 1800px; } }
+
+  /* PFLEGE: schmalschirm */
+  @media (max-width: 700px) {
+    table { display: block; max-width: 100%; overflow-x: auto; }
+    select, input[type=text], input[type=number], input[type=search] { max-width: 100%; }
+  }
+
+  /* PFLEGE: klickflaechen */
+  button, select { min-height: 34px; }
+  input[type=range] { height: 26px; }
 </style>
 </head>
 <body>
@@ -577,7 +587,7 @@
     const zeile = (was, umfang, gut, text) => {
       const tr = document.createElement("tr");
       tr.innerHTML = "<td>" + was + "</td><td>" + umfang + "</td><td style='color:" +
-        (gut ? "var(--akzent)" : "var(--warn)") + "'>" + text + "</td>";
+        (gut ? "var(--merk)" : "var(--warn)") + "'>" + text + "</td>";
       tb.append(tr);
     };
 
